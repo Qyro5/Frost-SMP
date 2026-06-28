@@ -1,18 +1,34 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getColor } from '../../config/bot.js';
-import { createEmbed, successEmbed, errorEmbed } from '../../utils/embeds.js';
+import { successEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
-import { handleInteractionError, withErrorHandling, createError, ErrorTypes } from '../../utils/errorHandler.js';
+import { handleInteractionError, withErrorHandling } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
-import { getGuildConfig } from '../../services/guildConfig.js';
 
 const STAFF_APPLICATION_QUESTIONS = [
-  { question: "What is your Discord username and ID?", required: true },
-  { question: "How long have you been in the community?", required: true },
+  { question: "What is your Discord username?", required: true },
+  { question: "How old are you?", required: true },
+  { question: "What timezone are you in, and how active can you be each week?", required: true },
   { question: "Why do you want to become a staff member?", required: true },
-  { question: "What experience do you have with moderation?", required: true },
-  { question: "Describe a situation where you helped resolve a conflict.", required: true },
+  { question: "Do you have moderation experience, and how would you handle a rule breaker?", required: true },
 ];
+
+function getConfiguredStaffApp(guildId) {
+  const runtimeConfig = global.staffAppConfigs?.[guildId];
+  if (runtimeConfig) {
+    return runtimeConfig;
+  }
+
+  if (process.env.STAFF_APPLICATION_CHANNEL_ID && process.env.STAFF_ROLE_ID) {
+    return {
+      reviewChannelId: process.env.STAFF_APPLICATION_CHANNEL_ID,
+      staffRoleId: process.env.STAFF_ROLE_ID,
+      source: 'env',
+    };
+  }
+
+  return null;
+}
 
 export default {
   slashOnly: true,
@@ -40,8 +56,7 @@ export default {
             .setDescription("Role required to review applications")
             .setRequired(true),
         ),
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    ),
 
   category: "Community",
 
@@ -65,16 +80,28 @@ export default {
 
 async function handleSetup(interaction) {
   try {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      logger.warn('Unauthorized staff application setup attempt', {
+        event: 'staffapp.setup.unauthorized',
+        guildId: interaction.guild.id,
+        guildName: interaction.guild.name,
+        userId: interaction.user.id,
+        userTag: interaction.user.tag
+      });
+
+      return await InteractionHelper.safeReply(interaction, {
+        content: 'You need the Manage Server permission to configure staff applications.',
+        flags: ["Ephemeral"]
+      });
+    }
+
     await InteractionHelper.safeDefer(interaction);
 
     const reviewChannel = interaction.options.getChannel("review_channel");
     const staffRole = interaction.options.getRole("staff_role");
 
-    // Get or create guild config
     const guildId = interaction.guild.id;
-    const configKey = `staffapp_${guildId}`;
-    
-    // Store configuration (you may want to use a database instead)
+
     if (!global.staffAppConfigs) {
       global.staffAppConfigs = {};
     }
@@ -95,10 +122,13 @@ async function handleSetup(interaction) {
     await InteractionHelper.safeEditReply(interaction, { embeds: [embed] });
 
     logger.info('Staff application settings updated', {
+      event: 'staffapp.setup.updated',
       guildId,
+      guildName: interaction.guild.name,
       reviewChannelId: reviewChannel.id,
       staffRoleId: staffRole.id,
-      userId: interaction.user.id
+      userId: interaction.user.id,
+      userTag: interaction.user.tag
     });
   } catch (error) {
     logger.error('Error in staffapply setup:', {
