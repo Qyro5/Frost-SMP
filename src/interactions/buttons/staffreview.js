@@ -85,6 +85,7 @@ function createStaffReviewButton(action) {
 
       // Get the applicant user
       const applicant = await client.users.fetch(applicantUserId).catch(() => null);
+      const applicantMember = await interaction.guild.members.fetch(applicantUserId).catch(() => null);
       if (!applicant) {
         logger.warn('Could not fetch applicant for staff review decision', {
           event: 'staffapp.review_button.applicant_fetch_failed',
@@ -98,6 +99,31 @@ function createStaffReviewButton(action) {
       const statusEmoji = action === 'accept' ? '✅' : '❌';
       const statusText = action === 'accept' ? 'Accepted' : 'Denied';
       const statusColor = action === 'accept' ? getColor('embeds.colors.success') : getColor('embeds.colors.error');
+      let roleAssigned = false;
+      let roleAssignError = null;
+
+      if (action === 'accept') {
+        if (!applicantMember) {
+          roleAssignError = 'Applicant is no longer in this server.';
+        } else if (!staffRole) {
+          roleAssignError = 'Configured staff role was not found.';
+        } else {
+          try {
+            await applicantMember.roles.add(staffRole, `Staff application ${applicationId} accepted by ${interaction.user.tag}`);
+            roleAssigned = true;
+          } catch (error) {
+            roleAssignError = error.message;
+            logger.error('Failed to assign staff role after accepting application', {
+              event: 'staffapp.review_button.role_assign_failed',
+              error: error.message,
+              applicationId,
+              applicantUserId,
+              staffRoleId: config.staffRoleId,
+              guildId
+            });
+          }
+        }
+      }
 
       // Update the embed in the review channel
       const reviewChannel = interaction.guild.channels.cache.get(config.reviewChannelId);
@@ -216,7 +242,8 @@ function createStaffReviewButton(action) {
       const confirmEmbed = successEmbed(
         `✅ Application ${statusText}`,
         `You have successfully ${action === 'accept' ? 'accepted' : 'denied'} application \`${applicationId}\`.\n\n` +
-        `${dmSent ? '✓ The applicant has been notified via DM.' : '⚠️ Could not send DM to applicant (DMs may be closed).'}`
+        `${dmSent ? '✓ The applicant has been notified via DM.' : '⚠️ Could not send DM to applicant (DMs may be closed).'}` +
+        `${action === 'accept' ? `\n${roleAssigned ? `Assigned ${staffRole}.` : `Could not assign staff role: ${roleAssignError}`}` : ''}`
       );
 
       await InteractionHelper.safeEditReply(interaction, {
