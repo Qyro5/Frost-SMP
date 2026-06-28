@@ -148,8 +148,7 @@ async function handleStaffApplicationForm(interaction) {
   try {
     const guildId = interaction.guild.id;
     
-    // Get configuration
-    const config = global.staffAppConfigs?.[guildId];
+    const config = getStaffConfig(guildId);
     
     if (!config) {
       return await InteractionHelper.safeReply(interaction, {
@@ -239,7 +238,7 @@ export async function handleStaffApplicationSubmission(interaction) {
 
   try {
     const guildId = interaction.guild.id;
-    const config = global.staffAppConfigs?.[guildId];
+    const config = getStaffConfig(guildId);
 
     if (!config) {
       return await InteractionHelper.safeReply(interaction, {
@@ -380,7 +379,7 @@ export async function getApplicationById(applicationId) {
 }
 
 export function getStaffConfig(guildId) {
-  return global.staffAppConfigs?.[guildId] || null;
+  return getConfiguredStaffApp(guildId);
 }
 
 export const QUESTIONS = STAFF_APPLICATION_QUESTIONS;

@@ -3,16 +3,16 @@ import { getColor } from '../../config/bot.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
-import { getApplicationById, getStaffConfig } from '../commands/Community/staffapply.js';
+import { getApplicationById, getStaffConfig } from '../../commands/Community/staffapply.js';
 
-export default {
-  customId: /^staff_(accept|deny):/,
+function createStaffReviewButton(action) {
+  return {
+    name: `staff_${action}`,
 
-  async execute(interaction, client, args) {
-    try {
-      const action = args[0]; // 'accept' or 'deny'
-      const applicationId = args[1];
-      const applicantUserId = args[2];
+    async execute(interaction, client, args) {
+      try {
+        const applicationId = args[0];
+        const applicantUserId = args[1];
 
       if (!action || !applicationId || !applicantUserId) {
         logger.warn('Invalid staff review button parameters', {
@@ -259,30 +259,36 @@ export default {
         guildId,
         guildName: interaction.guild.name
       });
-    } catch (error) {
-      logger.error('Error processing staff application review', {
-        event: 'staffapp.review_button.error',
-        error: error.message,
-        stack: error.stack,
-        customId: interaction.customId,
-        userId: interaction.user.id,
-        guildId: interaction.guild.id
-      });
-
-      const errorMsg = errorEmbed(
-        'Review Error',
-        'An error occurred while processing your decision. Please try again or contact an administrator.'
-      );
-
-      await InteractionHelper.safeReply(interaction, {
-        embeds: [errorMsg],
-        flags: ["Ephemeral"]
-      }).catch(() => {
-        logger.error('Failed to send error message for staff review button', {
-          event: 'staffapp.review_button.error_response_failed',
-          userId: interaction.user.id
+      } catch (error) {
+        logger.error('Error processing staff application review', {
+          event: 'staffapp.review_button.error',
+          error: error.message,
+          stack: error.stack,
+          customId: interaction.customId,
+          userId: interaction.user.id,
+          guildId: interaction.guild.id
         });
-      });
+
+        const errorMsg = errorEmbed(
+          'Review Error',
+          'An error occurred while processing your decision. Please try again or contact an administrator.'
+        );
+
+        await InteractionHelper.safeReply(interaction, {
+          embeds: [errorMsg],
+          flags: ["Ephemeral"]
+        }).catch(() => {
+          logger.error('Failed to send error message for staff review button', {
+            event: 'staffapp.review_button.error_response_failed',
+            userId: interaction.user.id
+          });
+        });
+      }
     }
-  }
-};
+  };
+}
+
+export default [
+  createStaffReviewButton('accept'),
+  createStaffReviewButton('deny'),
+];
